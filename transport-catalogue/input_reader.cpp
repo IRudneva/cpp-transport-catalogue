@@ -1,9 +1,7 @@
 #include "input_reader.h"
-#include "geo.h"
-#include "transport_catalogue.h"
-#include "stat_reader.h"
 
 #include <algorithm>
+
 using namespace std::string_literals;
 
 std::vector<std::string> parsing::RouteBus(std::string& request, size_t stop_title, char flag) {
@@ -148,9 +146,8 @@ void ReadRequest(std::istream& input, TransportCatalogue& catalogue) {
 		}
 		count_request_base--;
 	}
-	//формируем базу маршрутов и остановок
-	upload_request::Bus(request_base_bus, catalogue);
-	upload_request::Stop(request_base_stop, catalogue);
+
+	catalogue.CreateCatalogue(request_base_stop, request_base_bus);
 
 	//запросы на поиск
 	int count_request_bus_information;
@@ -165,13 +162,13 @@ void ReadRequest(std::istream& input, TransportCatalogue& catalogue) {
 		if (type_request_search == "Bus"s)
 		{
 			auto inf = catalogue.SearchBus(request_for_search);
-			print::BusInformation(inf);
+			print::BusInformation(std::cout, inf);
 			count_request_bus_information--;
 		}
 		else
 		{
 			auto inf = catalogue.SearchStop(request_for_search);
-			print::StopInformation(inf);
+			print::StopInformation(std::cout, inf);
 			count_request_bus_information--;
 		}
 	}

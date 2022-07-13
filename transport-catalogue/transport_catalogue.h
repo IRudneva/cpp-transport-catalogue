@@ -27,14 +27,33 @@ namespace information {
 	};
 }
 
+namespace request {
+	struct Bus
+	{
+		char flag;
+		std::string number;
+		std::vector<std::string> stops;
+	};
+
+	struct Stop
+	{
+		std::string title;
+		coordinates::Coordinates coord;
+		std::unordered_map<std::string, uint32_t> distance_next_stop;
+	};
+}
+
 class TransportCatalogue
 {
 public:
+	
 	TransportCatalogue() = default;
 
 	void AddStop(std::string& stop, coordinates::Coordinates& coordinstes, std::unordered_map<std::string, uint32_t>& distance_next_stop);
 
 	void AddBus(std::string& bus, std::vector<std::string>& stops, char flag);
+
+	void CreateCatalogue(std::vector<request::Stop>& stop, std::vector<request::Bus>& bus);
 
 	information::Route SearchBus(std::string& bus);
 
@@ -42,7 +61,7 @@ public:
 
 	std::unordered_map<std::string_view, std::unordered_map<std::string_view, uint32_t>>& GetNextStops();
 
-	const std::optional<uint32_t> GetLenght(const std::string_view from, const std::string_view to) const;
+	const std::optional<uint32_t> GetLength(const std::string_view from, const std::string_view to) const;
 
 private:
 
@@ -59,19 +78,19 @@ private:
 		coordinates::Coordinates coordinates;
 	};
 
-	//для поиска
-	std::unordered_map<std::string_view, Bus> buses_; 
+	std::unordered_map<std::string_view, Bus> buses_;
 	std::unordered_map<std::string_view, Stop> stops_;
-	information::Stop buses_for_stop_;
+	std::unordered_map<std::string_view, std::set<std::string_view>> buses_for_stop_;
 	std::unordered_map<std::string_view, std::unordered_map<std::string_view, uint32_t>> next_stops_for_stop_;
-
+	std::unordered_map < std::string_view, std::pair<double, double>> lenght_for_all_buses_;
 	//храним string
 	std::deque<std::string> data_bus_;
 	std::deque<std::string> data_stop_;
-
 	std::deque<std::string> all_stops_;
 
 	void SetDistance(const std::string_view current_stop, std::unordered_map<std::string, uint32_t>& distance_next_stop);
+
+	void SetBusesForAllStops();
 
 	std::vector<std::string_view> CreateLoopRoute(std::vector<std::string>& route) const;
 

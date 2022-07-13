@@ -52,6 +52,24 @@ void TransportCatalogue::AddBus(std::string& bus, std::vector<std::string>& stop
 	}
 }
 
+void TransportCatalogue::CreateCatalogue(std::vector<request::Stop>& stop, std::vector<request::Bus>& bus) {
+
+	for (auto& title_stop : stop) {
+		AddStop(title_stop.title, title_stop.coord, title_stop.distance_next_stop);
+	}
+
+	for (auto& title_bus : bus) {
+		AddBus(title_bus.number, title_bus.stops, title_bus.flag);
+	}
+
+	SetBusesForAllStops();
+
+	for (const auto& bus : data_bus_)
+	{
+		lenght_for_all_buses_[bus] = std::move(GetAllLenght(buses_.at(bus).route));
+	}
+}
+
 information::Route TransportCatalogue::SearchBus(std::string& bus) {
 	information::Route information_result;
 	if (buses_.find(bus) == buses_.end())
@@ -64,7 +82,7 @@ information::Route TransportCatalogue::SearchBus(std::string& bus) {
 	information_result.bus_num = *(find(data_bus_.begin(), data_bus_.end(), bus));
 	information_result.total_stops = buses_.at(bus).route.size();
 	information_result.uni_stops = buses_.at(bus).uni_stops.size();
-	information_result.all_lenght = std::move(GetAllLenght(buses_.at(bus).route));
+	information_result.all_lenght = lenght_for_all_buses_.at(bus); ////////////
 	return information_result;
 }
 
@@ -80,18 +98,7 @@ information::Stop TransportCatalogue::SearchStop(std::string& stop) {
 
 	information_result.isfind = true;
 	information_result.stop_title = *(find(data_stop_.begin(), data_stop_.end(), stop));
-
-	for (const auto& [name, bus] : buses_)
-	{
-		auto bus_for_stop = std::find(bus.uni_stops.begin(), bus.uni_stops.end(), stop);
-		if (bus_for_stop != bus.uni_stops.end()) {
-			information_result.buses.insert(name);
-		}
-		else
-		{
-			continue;
-		}
-	}
+	information_result.buses = buses_for_stop_[information_result.stop_title];
 	return information_result;
 }
 
@@ -99,7 +106,7 @@ std::unordered_map<std::string_view, std::unordered_map<std::string_view, uint32
 	return next_stops_for_stop_;
 }
 
-const std::optional<uint32_t> TransportCatalogue::GetLenght(const std::string_view from, const std::string_view to) const {
+const std::optional<uint32_t> TransportCatalogue::GetLength(const std::string_view from, const std::string_view to) const {
 	auto lenght = next_stops_for_stop_.at(from).find(to);
 	if (lenght == next_stops_for_stop_.at(from).end())
 	{
@@ -113,7 +120,7 @@ const std::optional<uint32_t> TransportCatalogue::GetLenght(const std::string_vi
 }
 
 void TransportCatalogue::SetDistance(const std::string_view current_stop, std::unordered_map<std::string, uint32_t>& distance_next_stop) {
-	for (const auto& [stop, dist] : distance_next_stop) {
+	for (const auto&[stop, dist] : distance_next_stop) {
 		std::string_view next;
 		auto it_find_stop = std::find(all_stops_.begin(), all_stops_.end(), stop);
 		if (it_find_stop == all_stops_.end())
@@ -133,6 +140,26 @@ void TransportCatalogue::SetDistance(const std::string_view current_stop, std::u
 	if (distance_next_stop.empty() && equal_route != all_stops_.end())
 	{
 		next_stops_for_stop_[current_stop][*equal_route] = next_stops_for_stop_[*equal_route][current_stop];
+	}
+}
+
+void TransportCatalogue::SetBusesForAllStops() {
+	for (const auto& stop : data_stop_)
+	{
+		for (const auto& [bus, info] : buses_)
+		{
+			auto bus_for_stop = std::find(info.uni_stops.begin(), info.uni_stops.end(), stop);
+			if (bus_for_stop != info.uni_stops.end())
+			{
+				buses_for_stop_[stop].insert(bus);
+
+			}
+		}
+
+		if (buses_for_stop_[stop].empty())
+		{
+			buses_for_stop_[stop] = {};
+		}
 	}
 }
 
@@ -162,7 +189,7 @@ std::pair<double, double> TransportCatalogue::GetAllLenght(std::vector<std::stri
 	double lenght = 0.0;
 	double curvature = 0.0;
 	for (auto stop1 = total_stops.begin(), stop2 = stop1 + 1; stop2 != total_stops.end(); ++stop1, ++stop2) {
-		std::optional<uint32_t> lenght_ = GetLenght(*stop1, *stop2);
+		std::optional<uint32_t> lenght_ = GetLength(*stop1, *stop2);
 		if (lenght_ != std::nullopt) {
 			lenght += static_cast<double>(*lenght_);
 		}
