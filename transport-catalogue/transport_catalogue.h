@@ -1,102 +1,67 @@
 #pragma once
-#include <unordered_set>
-#include <unordered_map>
-#include <string>
-#include <vector>
+
+#include "geo.h"     
+#include "domain.h"  
+
 #include <deque>
-#include <string_view>
+#include <unordered_map>
 #include <set>
-#include <optional>
+#include <map>
 
-#include "geo.h"
-
-namespace information {
-	struct Route
+namespace transport_catalogue
+{
+	struct StopStat
 	{
-		std::string_view bus_num;
-		size_t total_stops = 0;
-		size_t uni_stops = 0;
-		std::pair<double, double> all_lenght;
-	};
-
-	struct Stop
-	{
-		bool isfind = false;
-		std::string_view stop_title;
+		explicit StopStat(std::string_view, std::set<std::string_view>&);
+		std::string_view name;
 		std::set<std::string_view> buses;
 	};
+
+	struct RouteStat
+	{
+		explicit RouteStat(size_t, size_t, int64_t, double, std::string_view);
+		size_t stops_on_route = 0;
+		size_t unique_stops = 0;
+		int64_t meters_route_length = 0;
+		double curvature = 0L;
+		std::string name;
+	};
+
+	class TransportCatalogue
+	{
+	public:
+		TransportCatalogue();
+		~TransportCatalogue();
+
+		void AddStop(Stop&&);
+		void AddRoute(Route&&);
+		void AddDistance(const Stop*, const Stop*, size_t);
+
+		size_t GetDistance(const Stop*, const Stop*);
+		size_t GetDistanceDirectly(const Stop*, const Stop*);
+
+		Stop* GetStopByName(std::string_view) const;
+		Route* GetRouteByName(std::string_view) const;
+		const std::vector<const Stop*> GetAllStopsPtr() const;
+		const std::deque<const Route* > GetAllRoutesPtr() const;
+		size_t GetAllStopsCount() const;
+
+		RouteStat* GetRouteInfo(std::string_view) const;
+		StopStat* GetBusesForStop(const std::string_view)const;
+
+		void GetAllRoutes(std::map<const std::string, RendererData>&) const;
+
+	private:
+		std::string_view GetStopName(const Stop* stop_ptr);
+		std::string_view GetStopName(const Stop stop);
+		std::string_view GetBusName(const Route* route_ptr);
+		std::string_view GetBusName(const Route route);
+
+		std::deque<Stop> all_stops_data_;
+		std::deque<Route> all_buses_data_;
+		std::unordered_map<std::string_view, Stop*> all_stops_map_;
+		std::unordered_map<std::string_view, Route*> all_buses_map_;
+		std::unordered_map<std::pair<const Stop*, const Stop*>, size_t, PairPointersHasher> distances_map_;
+
+	};
 }
-
-namespace request {
-	struct Bus
-	{
-		char flag;
-		std::string number;
-		std::vector<std::string> stops;
-	};
-
-	struct Stop
-	{
-		std::string title;
-		coordinates::Coordinates coord;
-		std::unordered_map<std::string, uint32_t> distance_next_stop;
-	};
-}
-
-class TransportCatalogue
-{
-public:
-	
-	TransportCatalogue() = default;
-
-	void AddStop(std::string& stop, coordinates::Coordinates& coordinstes, std::unordered_map<std::string, uint32_t>& distance_next_stop);
-
-	void AddBus(std::string& bus, std::vector<std::string>& stops, char flag);
-
-	void CreateCatalogue(std::vector<request::Stop>& stop, std::vector<request::Bus>& bus);
-
-	information::Route SearchBus(std::string& bus);
-
-	information::Stop SearchStop(std::string& stop);
-
-	std::unordered_map<std::string_view, std::unordered_map<std::string_view, uint32_t>>& GetNextStops();
-
-	const std::optional<uint32_t> GetLength(const std::string_view from, const std::string_view to) const;
-
-private:
-
-	struct Bus
-	{
-		std::string_view number;
-		std::vector<std::string_view> route;
-		std::vector<std::string_view> uni_stops;
-	};
-
-	struct Stop
-	{
-		std::string_view title;
-		coordinates::Coordinates coordinates;
-	};
-
-	std::unordered_map<std::string_view, Bus> buses_;
-	std::unordered_map<std::string_view, Stop> stops_;
-	std::unordered_map<std::string_view, std::set<std::string_view>> buses_for_stop_;
-	std::unordered_map<std::string_view, std::unordered_map<std::string_view, uint32_t>> next_stops_for_stop_;
-	std::unordered_map < std::string_view, std::pair<double, double>> lenght_for_all_buses_;
-	//храним string
-	std::deque<std::string> data_bus_;
-	std::deque<std::string> data_stop_;
-	std::deque<std::string> all_stops_;
-
-	void SetDistance(const std::string_view current_stop, std::unordered_map<std::string, uint32_t>& distance_next_stop);
-
-	void SetBusesForAllStops();
-
-	std::vector<std::string_view> CreateLoopRoute(std::vector<std::string>& route) const;
-
-	std::vector<std::string_view> CreateTwoWayRoute(std::vector<std::string>& route) const;
-
-	std::vector<std::string_view> GetUniqueStops(const std::vector<std::string_view>& stops) const;
-
-	std::pair<double, double> GetAllLenght(std::vector<std::string_view>& total_stops) const;
-};

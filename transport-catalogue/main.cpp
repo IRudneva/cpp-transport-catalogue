@@ -1,9 +1,16 @@
-#include "input_reader.h"
-#include "transport_catalogue.h"
+#include "request_handler.h"    
+#include "json_reader.h"        
+#include "map_renderer.h"
 
-using namespace std;
+#include <iostream>         
+#include <sstream>
 
-int main() {
-    TransportCatalogue transport_catalogue;
-    ReadRequest(std::cin, transport_catalogue);
+
+int main()
+{
+    transport_catalogue::TransportCatalogue tc;
+    map_renderer::MapRenderer mr;
+    transport_catalogue::RequestHandler rh(tc, mr);
+    json_reader::ProcessJSON(tc, rh, mr, std::cin, std::cout);
+
 }
