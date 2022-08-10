@@ -11,6 +11,6 @@ int main()
     transport_catalogue::TransportCatalogue tc;
     map_renderer::MapRenderer mr;
     transport_catalogue::RequestHandler rh(tc, mr);
-    json_reader::ProcessJSON(tc, rh, mr, std::cin, std::cout);
-
+    JSONReader jr;
+    jr.ProcessJSON(tc, rh, mr, std::cin, std::cout);
 }
