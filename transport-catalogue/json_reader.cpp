@@ -1,13 +1,16 @@
 #include "json_reader.h"
 
+#include <sstream>
+
 void JSONReader::ProcessJSON(transport_catalogue::TransportCatalogue& tc,
 	transport_catalogue::RequestHandler& rh,
+
 	map_renderer::MapRenderer& mr,
 	std::istream& input, std::ostream& output)
 {
 	using namespace std::literals;
 	const json::Document j_doc = json::Load(input);
-	const json::Dict j_dict = j_doc.GetRoot().AsMap();
+	const json::Dict j_dict = j_doc.GetRoot().AsDict();
 	const auto base_requests_it = j_dict.find("base_requests"s);
 	if (base_requests_it != j_dict.cend())
 	{
@@ -17,7 +20,7 @@ void JSONReader::ProcessJSON(transport_catalogue::TransportCatalogue& tc,
 	const auto renderer_settings_it = j_dict.find("render_settings"s);
 	if (renderer_settings_it != j_dict.cend())
 	{
-		ReadRendererSettings(mr, renderer_settings_it->second.AsMap());
+		ReadRendererSettings(mr, renderer_settings_it->second.AsDict());
 	}
 	//rh.GetMapRender().Render(output);
 
@@ -33,36 +36,36 @@ void JSONReader::AddToDataBase(transport_catalogue::TransportCatalogue& tc, cons
 	using namespace std::literals;
 	for (const auto& element : j_arr)
 	{
-		const auto request_type = element.AsMap().find("type"s);
-		if (request_type != element.AsMap().end())
+		const auto request_type = element.AsDict().find("type"s);
+		if (request_type != element.AsDict().end())
 		{
 			if (request_type->second.AsString() == "Stop"s)
 			{
-				AddStopData(tc, element.AsMap());
+				AddStopData(tc, element.AsDict());
 			}
 		}
 	}
 
 	for (const auto& element : j_arr)
 	{
-		const auto request_type = element.AsMap().find("type"s);
-		if (request_type != element.AsMap().end())
+		const auto request_type = element.AsDict().find("type"s);
+		if (request_type != element.AsDict().end())
 		{
 			if (request_type->second.AsString() == "Stop"s)
 			{
-				AddStopDistance(tc, element.AsMap());
+				AddStopDistance(tc, element.AsDict());
 			}
 		}
 	}
 
 	for (const auto& element : j_arr)
 	{
-		const auto request_type = element.AsMap().find("type"s);
-		if (request_type != element.AsMap().end())
+		const auto request_type = element.AsDict().find("type"s);
+		if (request_type != element.AsDict().end())
 		{
 			if (request_type->second.AsString() == "Bus"s)
 			{
-				AddRouteData(tc, element.AsMap());
+				AddRouteData(tc, element.AsDict());
 			}
 		}
 	}
@@ -86,7 +89,7 @@ void JSONReader::AddStopDistance(transport_catalogue::TransportCatalogue& tc, co
 	transport_catalogue::Stop* from_ptr = tc.GetStopByName(from_stop_name);
 	if (from_ptr != nullptr)
 	{
-		const json::Dict stops = j_dict.at("road_distances"s).AsMap();
+		const json::Dict stops = j_dict.at("road_distances"s).AsDict();
 		for (const auto& [to_stop_name, distance] : stops)
 		{
 			tc.AddDistance(from_ptr, tc.GetStopByName(to_stop_name), static_cast<size_t>(distance.AsInt()));
@@ -177,20 +180,20 @@ void JSONReader::ProcessQueriesJSON(transport_catalogue::RequestHandler& rh, con
 	json::Array processed_queries;
 	for (const auto& query : j_arr)
 	{
-		const auto request_type = query.AsMap().find("type"s);
-		if (request_type != query.AsMap().cend())
+		const auto request_type = query.AsDict().find("type"s);
+		if (request_type != query.AsDict().cend())
 		{
 			if (request_type->second.AsString() == "Stop"s)
 			{
-				processed_queries.emplace_back(ProcessStopQuery(rh, query.AsMap()));
+				processed_queries.emplace_back(ProcessStopQuery(rh, query.AsDict()));
 			}
 			else if (request_type->second.AsString() == "Bus"s)
 			{
-				processed_queries.emplace_back(ProcessRouteQuery(rh, query.AsMap()));
+				processed_queries.emplace_back(ProcessRouteQuery(rh, query.AsDict()));
 			}
 			else if (request_type->second.AsString() == "Map"s)
 			{
-				processed_queries.emplace_back(ProcessMapQuery(rh, query.AsMap()));
+				processed_queries.emplace_back(ProcessMapQuery(rh, query.AsDict()));
 			}
 		}
 	}
@@ -206,8 +209,13 @@ const json::Node JSONReader::ProcessStopQuery(transport_catalogue::RequestHandle
 
 	if (stop_query_ptr == nullptr)
 	{
-		return json::Dict{ {"request_id"s, j_dict.at("id"s).AsInt()},
-						  {"error_message"s, "not found"s} };
+		return json::Node{ json::Builder{}
+								.StartDict()
+									.Key("error_message"s).Value("not found"s)
+									.Key("request_id"s).Value(j_dict.at("id").AsInt())
+								.EndDict().Build() };
+		/*return json::Dict{ {"request_id"s, j_dict.at("id"s).AsInt()},
+						  {"error_message"s, "not found"s} };*/
 	}
 
 	json::Array routes;
@@ -215,8 +223,14 @@ const json::Node JSONReader::ProcessStopQuery(transport_catalogue::RequestHandle
 	{
 		routes.push_back(std::string(bus));
 	}
-	return json::Dict{ {"buses"s, routes},
-					  {"request_id"s, j_dict.at("id"s).AsInt()} };
+
+	return json::Node { json::Builder{}
+									.StartDict()
+										.Key("buses"s).Value(routes)
+										.Key("request_id"s).Value(j_dict.at("id").AsInt())
+									.EndDict().Build() };
+	/*return json::Dict{ {"buses"s, routes},
+					  {"request_id"s, j_dict.at("id"s).AsInt()} };*/
 }
 
 const json::Node JSONReader::ProcessRouteQuery(transport_catalogue::RequestHandler& rh, const json::Dict& j_dict)
@@ -228,14 +242,29 @@ const json::Node JSONReader::ProcessRouteQuery(transport_catalogue::RequestHandl
 
 	if (route_query_ptr == nullptr)
 	{
+		return json::Node{ json::Builder{}
+								.StartDict()
+									.Key("error_message"s).Value("not found"s)
+									.Key("request_id"s).Value(j_dict.at("id").AsInt())
+								.EndDict().Build() };
+		/*
 		return json::Dict{ {"request_id"s, j_dict.at("id"s).AsInt()},
-						  {"error_message"s, "not found"s} };
+						  {"error_message"s, "not found"s} };*/
 	}
-	return json::Dict{ {"curvature"s, route_query_ptr.value()->curvature},
-					  {"request_id"s, j_dict.at("id"s).AsInt()},
-					  {"route_length"s, static_cast<int>(route_query_ptr.value()->meters_route_length)},
-					  {"stop_count"s, static_cast<int>(route_query_ptr.value()->stops_on_route)},
-					  {"unique_stop_count"s, static_cast<int>(route_query_ptr.value()->unique_stops)} };
+
+	return json::Node { json::Builder{}
+								.StartDict()
+									.Key("curvature"s).Value(route_query_ptr.value()->curvature)
+									.Key("request_id"s).Value(j_dict.at("id").AsInt())
+									.Key("route_length"s).Value(static_cast<int>(route_query_ptr.value()->meters_route_length))
+									.Key("stop_count"s).Value(static_cast<int>(route_query_ptr.value()->stops_on_route))
+									.Key("unique_stop_count"s).Value(static_cast<int>(route_query_ptr.value()->unique_stops))
+								.EndDict().Build() };
+	//return json::Dict{ {"curvature"s, route_query_ptr.value()->curvature},
+	//				  {"request_id"s, j_dict.at("id"s).AsInt()},
+	//				  {"route_length"s, static_cast<int>(route_query_ptr.value()->meters_route_length)},
+	//				  {"stop_count"s, static_cast<int>(route_query_ptr.value()->stops_on_route)},
+	//				  {"unique_stop_count"s, static_cast<int>(route_query_ptr.value()->unique_stops)} };
 }
 
 const json::Node JSONReader::ProcessMapQuery(transport_catalogue::RequestHandler& rh, const json::Dict& j_dict)
@@ -244,6 +273,12 @@ const json::Node JSONReader::ProcessMapQuery(transport_catalogue::RequestHandler
 	svg::Document svg_map = rh.GetMapRender();
 	std::ostringstream os_stream;
 	svg_map.Render(os_stream);
-	return json::Dict{ {"map"s, os_stream.str()},
-					  {"request_id"s, j_dict.at("id"s).AsInt()} };
+
+	return json::Node { json::Builder{}
+									.StartDict()
+										.Key("map"s).Value(os_stream.str())
+										.Key("request_id"s).Value(j_dict.at("id"s).AsInt())
+									.EndDict().Build() };
+	/*return json::Dict{ {"map"s, os_stream.str()},
+					  {"request_id"s, j_dict.at("id"s).AsInt()} };*/
 }

@@ -3,6 +3,7 @@
 #include "request_handler.h"        
 #include "json.h"
 #include "map_renderer.h"
+#include "json_builder.h"
 
 class JSONReader {
 public:
