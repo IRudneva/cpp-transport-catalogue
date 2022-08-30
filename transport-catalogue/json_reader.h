@@ -4,6 +4,7 @@
 #include "json.h"
 #include "map_renderer.h"
 #include "json_builder.h"
+#include "transport_router.h"
 
 class JSONReader {
 public:
@@ -22,11 +23,15 @@ private:
 
 	void ReadRendererSettings(map_renderer::MapRenderer&, const json::Dict&);
 
-	void ProcessQueriesJSON(transport_catalogue::RequestHandler&, const json::Array&, std::ostream&);
+	void ReadRouterSettings(router::TransportRouter&, const json::Dict&);
+
+	void ProcessQueriesJSON(transport_catalogue::RequestHandler&, router::TransportRouter&, const json::Array&, std::ostream&);
 
 	const json::Node ProcessStopQuery(transport_catalogue::RequestHandler&, const json::Dict&);
 
 	const json::Node ProcessRouteQuery(transport_catalogue::RequestHandler&, const json::Dict&);
 
 	const json::Node ProcessMapQuery(transport_catalogue::RequestHandler&, const json::Dict&);
+
+	const json::Node ProcessRouteBetweenTwoStopsQuery(router::TransportRouter&, const json::Dict&);
 };

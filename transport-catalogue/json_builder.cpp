@@ -161,8 +161,8 @@ namespace json {
 	//---------------- ValueItemContext ----------------
 	ValueItemContext::ValueItemContext(Builder& builder) : builder_(builder) {}
 
-	KeyItemContext ValueItemContext::Key(std::string key) {
-		return builder_.Key(move(key));
+	KeyItemContext ValueItemContext::Key(const std::string& key) {
+		return builder_.Key(key);
 	}
 
 	Builder& ValueItemContext::EndDict() {

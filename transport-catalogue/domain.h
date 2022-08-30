@@ -1,8 +1,7 @@
 #pragma once
 #include "geo.h"
-
-#include <string>
 #include <vector>
+#include <string>
 
 namespace transport_catalogue
 {
@@ -45,5 +44,4 @@ namespace transport_catalogue
 		std::vector<std::string_view> stop_names;
 		bool is_circular = false;
 	};
-
 }

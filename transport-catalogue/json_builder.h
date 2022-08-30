@@ -60,7 +60,7 @@ namespace json {
 	class ValueItemContext : private Builder {
 	public:
 		ValueItemContext(Builder& builder);
-		KeyItemContext Key(std::string key);
+		KeyItemContext Key(const std::string& key);
 		Builder& EndDict();
 
 		ArrayItemContext StartArray() = delete;
