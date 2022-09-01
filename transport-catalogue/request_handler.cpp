@@ -48,7 +48,6 @@ namespace detail
 
 namespace transport_catalogue
 {
-
 	const std::optional<RouteStat*> RequestHandler::GetRouteInfo(const std::string_view& bus_name) const
 	{
 		return transport_catalogue_.GetRouteInfo(bus_name);
@@ -66,5 +65,9 @@ namespace transport_catalogue
 		transport_catalogue_.GetAllRoutes(all_routes);
 
 		return map_render_.RenderMap(all_routes);
+	}
+
+	std::optional<const router::RouteData> RequestHandler::GetOptimalRoute(router::TransportRouter& tr, const std::string_view& from, const std::string_view& to) const {
+		return tr.CalculateRoute(from, to);
 	}
 }

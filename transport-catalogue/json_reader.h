@@ -33,5 +33,5 @@ private:
 
 	const json::Node ProcessMapQuery(transport_catalogue::RequestHandler&, const json::Dict&);
 
-	const json::Node ProcessRouteBetweenTwoStopsQuery(router::TransportRouter&, const json::Dict&);
+	const json::Node ProcessRouteBetweenTwoStopsQuery(router::TransportRouter&, transport_catalogue::RequestHandler&, const json::Dict&);
 };

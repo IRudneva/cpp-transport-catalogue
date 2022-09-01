@@ -26,7 +26,6 @@ namespace router
 	{
 		double total_time = 0.0;
 		std::vector<RouteItem> items;
-		bool founded = false;
 	};
 
 
@@ -37,10 +36,17 @@ namespace router
 
 		void ApplyRouterSettings(RouterSettings&);
 		const RouterSettings& GetRouterSettings() const;
-		const RouteData CalculateRoute(const std::string_view, const std::string_view);
+		std::optional<const RouteData> CalculateRoute(const std::string_view, const std::string_view);
 
 	private:
+	
+		const RouteData BuildOptimalRoute(const graph::Router<double>::RouteInfo&) const;
+
 		void BuildGraph();
+
+		void FillGraphStops(const std::vector<const transport_catalogue::Stop*>);
+
+		void FillGraphRoutes(const std::deque<const transport_catalogue::Route*>);
 
 		RouterSettings settings_;
 		transport_catalogue::TransportCatalogue& tc_;

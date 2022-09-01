@@ -16,37 +16,52 @@ namespace router
 		return settings_;
 	}
 
-	const RouteData TransportRouter::CalculateRoute(const std::string_view from, const std::string_view to)
+	std::optional<const RouteData> TransportRouter::CalculateRoute(const std::string_view from, const std::string_view to)
 	{
 		if (!router_)
 		{
 			BuildGraph();
 		}
 
-		RouteData result;
-		auto calculated_route = router_->BuildRoute(vertexes_wait_.at(from), vertexes_wait_.at(to));
-
-		if (calculated_route)
+		const auto stop_from = vertexes_wait_.at(from);
+		const auto stop_to = vertexes_wait_.at(to);
+		auto calculated_route = router_->BuildRoute(stop_from, stop_to);
+		if (!calculated_route)
 		{
-			result.founded = true;
-			for (const auto& element_id : calculated_route->edges)
-			{
-				auto edge_details = dw_graph_.GetEdge(element_id);
-				result.total_time += edge_details.weight;
-				result.items.emplace_back(RouteItem{
-					edge_details.edge_name,
-					(edge_details.type == graph::EdgeType::TRAVEL) ? edge_details.span_count : 0,
-					edge_details.weight,
-					edge_details.type });
-			}
+			return std::nullopt;
+		}
+
+		return RouteData{ BuildOptimalRoute(calculated_route.value()) };
+	}
+
+	const RouteData TransportRouter::BuildOptimalRoute(const graph::Router<double>::RouteInfo& router_inf) const {
+		RouteData result;
+
+		for (const auto& element_id : router_inf.edges)
+		{
+			auto edge_details = dw_graph_.GetEdge(element_id);
+			result.total_time += edge_details.weight;
+			result.items.emplace_back(RouteItem{
+				edge_details.edge_name,
+				(edge_details.type == graph::EdgeType::TRAVEL) ? edge_details.span_count : 0,
+				edge_details.weight,
+				edge_details.type });
 		}
 		return result;
 	}
 
 	void TransportRouter::BuildGraph()
 	{
+		FillGraphStops(tc_.GetAllStopsPtr());
+
+		FillGraphRoutes(tc_.GetAllRoutesPtr());
+
+		router_ = std::make_unique<graph::Router<double>>(dw_graph_);
+	}
+
+	void TransportRouter::FillGraphStops(const std::vector<const transport_catalogue::Stop*> all_stops) {
 		int vertex_id = 0;
-		for (const auto& stop : tc_.GetAllStopsPtr())
+		for (const auto& stop : all_stops)
 		{
 			vertexes_wait_.insert({ stop->name, vertex_id });
 			vertexes_travel_.insert({ stop->name, ++vertex_id });
@@ -60,8 +75,10 @@ namespace router
 				});
 			++vertex_id;
 		}
+	}
 
-		for (const auto& route : tc_.GetAllRoutesPtr())
+	void TransportRouter::FillGraphRoutes(const std::deque<const transport_catalogue::Route*> all_routes) {
+		for (const auto& route : all_routes)
 		{
 			for (size_t it_from = 0; it_from < route->stops.size() - 1; ++it_from)
 			{
@@ -84,6 +101,5 @@ namespace router
 				}
 			}
 		}
-		router_ = std::make_unique<graph::Router<double>>(dw_graph_);
 	}
 } //namespace router

@@ -22,9 +22,7 @@ void JSONReader::ProcessJSON(transport_catalogue::TransportCatalogue& tc,
 	{
 		ReadRendererSettings(mr, renderer_settings_it->second.AsDict());
 	}
-
 	router::TransportRouter tr(tc);
-
 	const auto router_settings_it = j_dict.find("routing_settings"s);
 	if (router_settings_it != j_dict.cend())
 	{
@@ -213,7 +211,7 @@ void JSONReader::ProcessQueriesJSON(transport_catalogue::RequestHandler& rh, rou
 			}
 			else if (request_type->second.AsString() == "Route"s)
 			{
-				processed_queries.emplace_back(ProcessRouteBetweenTwoStopsQuery(tr, query.AsDict()));
+				processed_queries.emplace_back(ProcessRouteBetweenTwoStopsQuery(tr, rh, query.AsDict()));
 			}
 		}
 	}
@@ -289,20 +287,22 @@ const json::Node JSONReader::ProcessMapQuery(transport_catalogue::RequestHandler
 									.EndDict().Build() };
 }
 
-const json::Node JSONReader::ProcessRouteBetweenTwoStopsQuery(router::TransportRouter& tr, const json::Dict& j_dict) {
+const json::Node JSONReader::ProcessRouteBetweenTwoStopsQuery(router::TransportRouter& tr, transport_catalogue::RequestHandler& rh, const json::Dict& j_dict) {
 	using namespace std::literals;
 	using namespace std::literals;
 
-	auto route_data = tr.CalculateRoute(j_dict.at("from").AsString(), j_dict.at("to").AsString());
+	const std::string route_name_from = j_dict.at("from"s).AsString();
+	const std::string route_name_to = j_dict.at("to"s).AsString();
+	auto route_data = rh.GetOptimalRoute(tr, route_name_from, route_name_to);//tr.CalculateRoute(j_dict.at("from").AsString(), j_dict.at("to").AsString());
 
-	if (!route_data.founded)
+	if (!route_data)
 	{
 		return json::Builder{}.StartDict().Key("request_id"s).Value(j_dict.at("id"s).AsInt()).
 			Key("error_message"s).Value("not found"s).EndDict().Build();
 	}
 
 	json::Array items;
-	for (const auto& item : route_data.items)
+	for (const auto& item : route_data.value().items)
 	{
 		json::Dict items_map;
 		if (item.type == graph::EdgeType::TRAVEL)
@@ -321,6 +321,6 @@ const json::Node JSONReader::ProcessRouteBetweenTwoStopsQuery(router::TransportR
 	}
 	return json::Builder{}.StartDict().
 		Key("request_id").Value(j_dict.at("id").AsInt()).
-		Key("total_time").Value(route_data.total_time).
+		Key("total_time").Value(route_data.value().total_time).
 		Key("items").Value(items).EndDict().Build();
 }
