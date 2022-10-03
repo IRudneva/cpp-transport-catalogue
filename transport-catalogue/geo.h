@@ -1,20 +1,28 @@
 #pragma once
+
 #include <cmath>
-const double EARTH_RADIUS = 6371000;
 
-namespace geo {
+namespace geo_coord {
 
-    struct Coordinates {
-        double lat; 
-        double lng; 
-        bool operator==(const Coordinates& other) const;
-        bool operator!=(const Coordinates& other) const;
-    };
+struct Coordinates {
+    double lat;
+    double lng;
 
-    class CoordinatesHasher {
-    public:
-        std::size_t operator()(const Coordinates& coords) const;
-    };
+    bool operator==(const Coordinates& other) const;
+    bool operator!=(const Coordinates& other) const;
+};
 
-    double ComputeDistance(Coordinates from, Coordinates to);
-}  // namespace geo
+#define knEarthRadius  6371000
+
+inline double ComputeDistance(Coordinates from, Coordinates to) {
+    using namespace std;
+    if (from == to) {
+        return 0;
+    }
+    static const double dr = 3.1415926535 / 180.;
+    return acos(sin(from.lat * dr) * sin(to.lat * dr)
+                + cos(from.lat * dr) * cos(to.lat * dr) * cos(abs(from.lng - to.lng) * dr))
+        * knEarthRadius;
+}
+
+} // namespace geo_coord

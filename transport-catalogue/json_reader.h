@@ -1,37 +1,97 @@
 #pragma once
 
-#include "request_handler.h"        
+#include <memory>
+
+#include "geo.h"
+#include "request_handler.h"
 #include "json.h"
 #include "map_renderer.h"
-#include "json_builder.h"
 #include "transport_router.h"
+#include "serialization.h"
 
-class JSONReader {
-public:
-	void ProcessJSON(transport_catalogue::TransportCatalogue&, transport_catalogue::RequestHandler&,
-		map_renderer::MapRenderer&, std::istream&, std::ostream&);
-private:
-	void AddToDataBase(transport_catalogue::TransportCatalogue&, const json::Array&);
+namespace json_reader {
 
-	void AddStopData(transport_catalogue::TransportCatalogue&, const json::Dict&);
+namespace details {
 
-	void AddStopDistance(transport_catalogue::TransportCatalogue&, const json::Dict&);
-
-	void AddRouteData(transport_catalogue::TransportCatalogue&, const json::Dict&);
-
-	const svg::Color ConvertColorJSONToSVG(const json::Node&);
-
-	void ReadRendererSettings(map_renderer::MapRenderer&, const json::Dict&);
-
-	void ReadRouterSettings(router::TransportRouter&, const json::Dict&);
-
-	void ProcessQueriesJSON(transport_catalogue::RequestHandler&, router::TransportRouter&, const json::Array&, std::ostream&);
-
-	const json::Node ProcessStopQuery(transport_catalogue::RequestHandler&, const json::Dict&);
-
-	const json::Node ProcessRouteQuery(transport_catalogue::RequestHandler&, const json::Dict&);
-
-	const json::Node ProcessMapQuery(transport_catalogue::RequestHandler&, const json::Dict&);
-
-	const json::Node ProcessRouteBetweenTwoStopsQuery(router::TransportRouter&, transport_catalogue::RequestHandler&, const json::Dict&);
+enum class query_type {
+    EMPTY,
+    STOP,
+    BUS,
+    MAP,
+    ROUTE
 };
+
+struct Query {
+    query_type type = query_type::EMPTY;
+
+    virtual ~Query() = default;
+};
+
+struct StopQuery : public Query {
+    std::string name;
+    geo_coord::Coordinates coordinates{0, 0};
+    std::vector<std::pair<int, std::string>> distances;
+};
+
+struct BusQuery : public Query {
+    std::string name;
+    bool is_roundtrip = false;
+    std::string name_last_stop;
+    std::vector<std::string> stops;
+};
+
+struct MapQuery : public Query {
+    std::string name;
+};
+
+struct StatQuery : public Query {
+    std::string name;
+    std::string from;
+    std::string to;
+    int id = 0;
+};
+
+StopQuery QueryStop(const json::Dict& dict);
+
+BusQuery QueryBus(const json::Dict& dict);
+
+MapQuery QueryMap(const json::Dict& dict);
+
+StatQuery QueryStat(const json::Dict& dict);
+
+std::string space_trimmer(const std::string& name);
+
+} // namespace details
+
+class JsonReader {
+public:
+    explicit JsonReader(transport_catalogue::TransportCatalogue& catalogue,
+                        map_renderer::MapRenderer& renderer,
+                        transport_router::TransportRouter& router,
+                        serialization::Serializator& serializator);
+
+    void GeneralLoadBase(std::istream& input);
+    void GeneralLoadRequests(std::istream& input);
+
+    void Parse();
+
+    void Print(std::ostream& out, request_handler::RequestHandler& request_handler);
+
+private:
+    transport_catalogue::TransportCatalogue& catalogue_;
+    map_renderer::MapRenderer& renderer_;
+    transport_router::TransportRouter& router_;
+    serialization::Serializator& serializator_;
+    std::vector<std::unique_ptr<details::Query>> queries_;
+
+    void LoadBase(const json::Array& vct);
+    void LoadStat(const json::Array& vct);
+    svg::Color LoadColor(const json::Node& node);
+    void LoadRender(const json::Dict& dict);
+    void LoadRouting(const json::Dict& dict);
+    void LoadSerialization(const json::Dict& dict);
+
+    size_t stat_count = 0;
+};
+
+} // namespace json_reader

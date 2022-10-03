@@ -1,66 +1,105 @@
 #pragma once
 
-#include "geo.h"     
-#include "domain.h"  
-
+#include <string>
+#include <string_view>
+#include <vector>
 #include <deque>
-#include <unordered_map>
 #include <set>
 #include <map>
+#include <unordered_set>
+#include <unordered_map>
 
-namespace transport_catalogue
-{
-	struct StopStat
-	{
-		explicit StopStat(std::string_view, std::set<std::string_view>&);
-		std::string_view name;
-		std::set<std::string_view> buses;
-	};
+#include "domain.h"
 
-	struct RouteStat
-	{
-		explicit RouteStat(size_t, size_t, int64_t, double, std::string_view);
-		size_t stops_on_route = 0;
-		size_t unique_stops = 0;
-		int64_t meters_route_length = 0;
-		double curvature = 0L;
-		std::string name;
-	};
+namespace transport_catalogue {
 
-	class TransportCatalogue
-	{
-	public:
-		TransportCatalogue();
-		~TransportCatalogue();
+// информация о маршруте
+struct BusInfo {
+    int stop_number;
+    int unique_stop_number;
+    int distance;
+    double curvature;
 
-		void AddStop(Stop&&);
-		void AddRoute(Route&&);
-		void AddDistance(const Stop*, const Stop*, size_t);
+    BusInfo();
+};
 
-		size_t GetDistance(const Stop*, const Stop*);
-		size_t GetDistanceDirectly(const Stop*, const Stop*);
+struct HasherPair {
+    size_t operator()(const std::pair<const domain::Stop*, const domain::Stop*>& p) const;
+};
 
-		Stop* GetStopByName(std::string_view) const;
-		Route* GetRouteByName(std::string_view) const;
-		const std::vector<const Stop*> GetAllStopsPtr() const;
-		const std::deque<const Route* > GetAllRoutesPtr() const;
-		size_t GetAllStopsCount() const;
+class TransportCatalogue {
+public:
+    TransportCatalogue() = default;
 
-		RouteStat* GetRouteInfo(std::string_view) const;
-		StopStat* GetBusesForStop(const std::string_view)const;
+    // добавить остановку
+    void AddStop(std::string_view name, geo_coord::Coordinates& coord);
 
-		void GetAllRoutes(std::map<const std::string, RendererData>&) const;
+    // добавить маршрут
+    void AddBus(std::string_view name, std::string_view name_last_stop, bool is_roundtrip, const std::vector<std::string>& stops);
 
-	private:
-		std::string_view GetStopName(const Stop* stop_ptr);
-		std::string_view GetStopName(const Stop stop);
-		std::string_view GetBusName(const Route* route_ptr);
-		std::string_view GetBusName(const Route route);
+    // добавить информацию о маршруте
+    void AddBusInfo(const domain::Bus* bus, const BusInfo& info);
 
-		std::deque<Stop> all_stops_data_;
-		std::deque<Route> all_buses_data_;
-		std::unordered_map<std::string_view, Stop*> all_stops_map_;
-		std::unordered_map<std::string_view, Route*> all_buses_map_;
-		std::unordered_map<std::pair<const Stop*, const Stop*>, size_t, PairPointersHasher> distances_map_;
-	};
-}
+    // поиск остановки по имени
+    const domain::Stop* FindStop(std::string_view name) const;
+
+    // поиск маршрута по имени
+    const domain::Bus* FindBus(std::string_view name) const;
+
+    // получение информации о маршруте
+    const BusInfo GetBusInfo(const domain::Bus* bus);
+    const BusInfo GetBusInfo(const std::string_view name);
+
+    // получение информации о автобусах проходящих через остановку
+    int GetBusesNumOnStop(const domain::Stop* stop) const;
+    std::vector<const domain::Bus*> GetBusesOnStop(const domain::Stop* stop);
+
+    // установить расстояние между остановок
+    void SetDistance(const std::string& stop_from, const std::string& stop_to, int distance);
+
+    // получить рассояние между остановок
+    int GetDistance(const domain::Stop* stop_from, const domain::Stop* stop_to) const;
+
+    // получить мапу для остановки: имя - указатель
+    const std::unordered_map<std::string_view, const domain::Stop*>& GetStops() const;
+
+    // получить мапу для маршрута: имя - указатель
+    const std::unordered_map<std::string_view, const domain::Bus*>& GetBuses() const;
+
+    // получить мапу для остановки: остановка - маршруты
+    const std::unordered_map<const domain::Stop*, std::unordered_set<domain::Bus*>>& GetStopToBuses() const;
+
+    // добавить расстояния для остановки
+    void AddStopDistance(const std::string& stop_name, std::vector<std::pair<int, std::string>>& vct_distance);
+
+    // получить мапу расстояний для остановок
+    const std::unordered_map<std::string, std::vector<std::pair<int, std::string>>>& GetStopDistance();
+
+private:
+    // здесь живут все имена (сюда показывает string_view)
+    std::deque<std::string> m_name_to_storage;
+
+    // остановки
+    std::deque<domain::Stop> m_stops;
+    std::unordered_map<std::string_view, const domain::Stop*> m_name_to_stop;
+
+    // маршруты
+    std::deque<domain::Bus> m_buses;
+    std::unordered_map<std::string_view, const domain::Bus*> m_name_to_bus;
+
+    // расстояния между остановками
+    std::unordered_map<std::pair<const domain::Stop*, const domain::Stop*>, int, HasherPair> m_distance;
+
+    // таблица для получения автобусов проходящих через остановку
+    std::unordered_map<const domain::Stop*, std::unordered_set<domain::Bus*>> m_stop_to_bus;
+
+    // таблица для получения информации о маршруте
+    std::unordered_map<const domain::Bus*, BusInfo> m_bus_to_info;
+
+    // таблица расстояний
+    std::unordered_map<std::string, std::vector<std::pair<int, std::string>>> m_stop_to_dist;
+
+    std::string_view GetName(std::string_view str);
+};
+
+} // namespace transport_catalogue

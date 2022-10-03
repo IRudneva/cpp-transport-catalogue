@@ -1,189 +1,160 @@
 #include "json_builder.h"
 
 namespace json {
-	Builder::Builder() {}
 
-	DictItemContext Builder::StartDict() {
-		if (nodes_stack_.empty()) {
-			nodes_stack_.push_back(new Node(Dict{}));
-		}
-		else if (nodes_stack_.back()->IsArray()) {
-			auto& new_node = const_cast<Array&>(nodes_stack_.back()->AsArray()).emplace_back(Node(Dict{}));
-			nodes_stack_.push_back(&new_node);
-		}
-		else if (nodes_stack_.back()->IsDict() && (value_ != nullptr)) {
-			*value_ = Node(Dict{});
-			nodes_stack_.push_back(value_);
-			value_ = nullptr;
-		}
-		else {
-			throw std::logic_error("Method StartDict can't called"s);
-		}
-		return { *this };
-	}
-
-	Builder& Builder::EndDict() {
-		if (nodes_stack_.empty() || nodes_stack_.back()->IsArray()) {
-			throw std::logic_error("Method EndDict can't called"s);
-		}
-		else if (nodes_stack_.back()->IsDict() && (value_ != nullptr)) {
-			throw std::logic_error("Method EndDict can't called"s);
-		}
-		else if (nodes_stack_.size() == 1) {
-			if (!nodes_stack_.back()->IsDict()) {
-				throw std::logic_error("Method EndDict can't called"s);
-			}
-			root_ = move(*nodes_stack_[0]);
-			return *this;
-		}
-		nodes_stack_.pop_back();
-		return *this;
-	}
-
-	KeyItemContext Builder::Key(std::string key) {
-		if (!nodes_stack_.empty() && nodes_stack_.back()->IsDict() && (value_ == nullptr)) {
-			value_ = &const_cast<Dict&>(nodes_stack_.back()->AsDict()).insert({ move(key), Node() }).first->second;
-		}
-		else {
-			throw std::logic_error("Method Key can't called"s);
-		}
-		return { *this };
-	}
-
-	ArrayItemContext Builder::StartArray() {
-		if (nodes_stack_.empty()) {
-			nodes_stack_.push_back(new Node(Array{}));
-		}
-		else if (nodes_stack_.back()->IsArray()) {
-			auto& new_node = const_cast<Array&>(nodes_stack_.back()->AsArray()).emplace_back(Node(Array{}));
-			nodes_stack_.push_back(&new_node);
-		}
-		else if (nodes_stack_.back()->IsDict() && (value_ != nullptr)) {
-			*value_ = Node(Array{});
-			nodes_stack_.push_back(value_);
-			value_ = nullptr;
-		}
-		else {
-			throw std::logic_error("Method StartArray can't called"s);
-		}
-		return { *this };
-	}
-
-	Builder& Builder::EndArray() {
-		if (nodes_stack_.empty() || nodes_stack_.back()->IsDict()) {
-			throw std::logic_error("Method EndArray can't called"s);
-		}
-		else if (nodes_stack_.back()->IsDict() && (value_ != nullptr)) {
-			throw std::logic_error("Method EndArray can't called"s);
-		}
-		else if (nodes_stack_.size() == 1) {
-			if (!nodes_stack_.back()->IsArray()) {
-				throw std::logic_error("Method EndArray can't called"s);
-			}
-			root_ = move(*nodes_stack_[0]);
-			return *this;
-		}
-		nodes_stack_.pop_back();
-		return *this;
-	}
-
-	Builder& Builder::Value(Node::Value value) {
-		if (nodes_stack_.empty()) {
-			nodes_stack_.push_back(new Node(move(value)));
-			root_ = move(*nodes_stack_[0]);
-			return *this;
-		}
-		else if (nodes_stack_.back()->IsDict() && (value_ != nullptr)) {
-			*value_ = std::move(value);
-			value_ = nullptr;
-		}
-		else if (nodes_stack_.back()->IsArray()) {
-			const_cast<Array&>(nodes_stack_.back()->AsArray()).push_back(move(value));
-		}
-		else {
-			throw std::logic_error("Method Value can't called"s);
-		}
-		return *this;
-	}
-
-	Node Builder::Build() {
-		if (nodes_stack_.size() > 1 || (nodes_stack_.size() == 0)) {
-			throw std::logic_error("JSON document was not completed"s);
-		}
-		else {
-			nodes_stack_.pop_back();
-		}
-		return root_;
-	}
-
-	//---------------- DictItemContext ----------------
-	DictItemContext::DictItemContext(Builder& builder) : builder_(builder) {}
-
-	Builder& DictItemContext::EndDict() {
-		return builder_.EndDict();
-	}
-
-	KeyItemContext DictItemContext::Key(std::string key) {
-		return builder_.Key(move(key));
-	}
-	//---------------- ArrayItemContext ----------------
-	ArrayItemContext::ArrayItemContext(Builder& builder) : builder_(builder) {}
-
-	DictItemContext ArrayItemContext::StartDict() {
-		return builder_.StartDict();
-	}
-
-	ArrayItemContext ArrayItemContext::StartArray() {
-		return builder_.StartArray();
-	}
-
-	Builder& ArrayItemContext::EndArray() {
-		return builder_.EndArray();
-	}
-
-	ArrValueItemContext ArrayItemContext::Value(Node::Value value) {
-		return builder_.Value(move(value));
-	}
-	//---------------- KeyItemContext ----------------
-	KeyItemContext::KeyItemContext(Builder& builder) : builder_(builder) {}
-
-	DictItemContext KeyItemContext::StartDict() {
-		return builder_.StartDict();
-	}
-
-	ArrayItemContext KeyItemContext::StartArray() {
-		return builder_.StartArray();
-	}
-
-	ValueItemContext KeyItemContext::Value(Node::Value value) {
-		return builder_.Value(move(value));
-	}
-	//---------------- ValueItemContext ----------------
-	ValueItemContext::ValueItemContext(Builder& builder) : builder_(builder) {}
-
-	KeyItemContext ValueItemContext::Key(const std::string& key) {
-		return builder_.Key(key);
-	}
-
-	Builder& ValueItemContext::EndDict() {
-		return builder_.EndDict();
-	}
-	//---------------- ArrValueItemContext ----------------
-	ArrValueItemContext::ArrValueItemContext(Builder& builder) : builder_(builder) {}
-
-	ArrValueItemContext ArrValueItemContext::Value(Node::Value value) {
-		return builder_.Value(move(value));
-	}
-
-	DictItemContext ArrValueItemContext::StartDict() {
-		return builder_.StartDict();
-	}
-
-	ArrayItemContext ArrValueItemContext::StartArray() {
-		return builder_.StartArray();
-	}
-
-	Builder& ArrValueItemContext::EndArray() {
-		return builder_.EndArray();
-	}
+DictKeyContext Builder::Key(std::string key) {
+    if ((std::nullopt == m_key) && IsPrevDict()) {
+        // нет ключа и добавление идет в словарь
+        m_key = std::move(key);
+        return *this;
+    } else {
+        using namespace std::literals;
+        throw std::logic_error("Wrong Key call"s);
+    }
 }
+
+Builder& Builder::Value(json::Node::Value value) {
+    AddValue(value);
+    return *this;
+}
+
+DictItemContext Builder::StartDict() {
+    if (IsPrevNull() ||
+        IsPrevArray() ||
+        (std::nullopt != m_key)) {
+        m_vct_node.emplace_back(std::move(AddValue(json::Dict())));
+        dict_started = true;
+        return *this;
+    } else {
+        using namespace std::literals;
+        throw std::logic_error("Wrong StartDict call"s);
+    }
+}
+
+ArrayItemContext Builder::StartArray() {
+    if (IsPrevNull() ||
+        IsPrevArray() ||
+        (std::nullopt != m_key)) {
+        m_vct_node.emplace_back(std::move(AddValue(json::Array())));
+        array_started = true;
+        return *this;
+    } else {
+        using namespace std::literals;
+        throw std::logic_error("Wrong StartArray call"s);
+    }
+}
+
+Builder& Builder::EndDict() {
+    if (IsPrevDict()) {
+        // словарь можно закончить только если он начинался
+        m_vct_node.pop_back();
+        dict_started = false;
+        return *this;
+    } else {
+        using namespace std::literals;
+        throw std::logic_error("Wrong EndDict call"s);
+    }
+}
+
+Builder& Builder::EndArray() {
+    if (IsPrevArray()) {
+        // массив можно закончить только если он начинался
+        m_vct_node.pop_back();
+        array_started = false;
+        return *this;
+    } else {
+        using namespace std::literals;
+        throw std::logic_error("Wrong EndArray call"s);
+    }
+}
+
+json::Node Builder::Build() {
+    if (IsObjExist() && !dict_started && !array_started) {
+        // строить можно только если есть из чего
+        return m_root;
+    } else {
+        using namespace std::literals;
+        throw std::logic_error("Wrong Build call"s);
+    }
+}
+
+json::Node* Builder::AddValue(json::Node::Value value) {
+    if (IsPrevNull()) {
+        // добавляем значение
+        m_vct_node.back()->GetValue() = std::move(value);
+        return m_vct_node.back();
+    } else if ((std::nullopt != m_key) && IsPrevDict()) {
+        // добавляем значение в словарь
+        json::Dict& dict = std::get<json::Dict>(m_vct_node.back()->GetValue());
+        auto entry = dict.emplace(m_key.value(), value);
+        // обнуляем ключ!
+        m_key = std::nullopt;
+        return &entry.first->second;
+    } else if (IsPrevArray()) {
+        // добавляем значение в массив
+        json::Array& array = std::get<json::Array>(m_vct_node.back()->GetValue());
+        return &array.emplace_back(value);
+    } else {
+        using namespace std::literals;
+        throw std::logic_error("Wrong Value call"s);
+    }
+}
+
+bool Builder::IsObjExist() const {
+    return (1 == m_vct_node.size()) && !m_vct_node.back()->IsNull();
+}
+
+bool Builder::IsPrevNull() const {
+    return !m_vct_node.empty() && m_vct_node.back()->IsNull();
+}
+
+bool Builder::IsPrevArray() const {
+    return !m_vct_node.empty() && m_vct_node.back()->IsArray();
+}
+
+bool Builder::IsPrevDict() const {
+    return !m_vct_node.empty() && m_vct_node.back()->IsMap();
+}
+
+// -->
+
+DictItemContext DictKeyContext::Value(json::Node::Value value) {
+    return DictItemContext(m_builder.Value(value));
+}
+
+DictItemContext DictKeyContext::StartDict() {
+    return m_builder.StartDict();
+}
+
+DictItemContext ArrayItemContext::StartDict() {
+    return m_builder.StartDict();
+}
+
+DictKeyContext DictItemContext::Key(std::string key) {
+    return m_builder.Key(key);
+}
+
+
+ArrayItemContext DictKeyContext::StartArray() {
+    return m_builder.StartArray();
+}
+
+ArrayItemContext ArrayItemContext::Value(json::Node::Value value) {
+    return ArrayItemContext(m_builder.Value(value));
+}
+
+ArrayItemContext ArrayItemContext::StartArray() {
+    return m_builder.StartArray();
+}
+
+Builder& DictItemContext::EndDict() {
+    return m_builder.EndDict();
+}
+
+Builder& ArrayItemContext::EndArray() {
+    return m_builder.EndArray();
+}
+
+// <--
+
+} // namespace json

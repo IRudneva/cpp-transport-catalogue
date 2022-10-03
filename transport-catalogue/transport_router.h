@@ -1,60 +1,78 @@
 #pragma once
 
+#include "graph.h"
+#include "router.h"
+#include "transport_catalogue.h"
+
+#include <unordered_map>
+#include <vector>
 #include <memory>
 
-#include "domain.h"    
-#include "transport_catalogue.h"
-#include "router.h"
+namespace transport_router {
 
-namespace router
-{
-	struct RouterSettings
-	{
-		int bus_velocity = 0;
-		int bus_wait_time = 0;
-	};
+struct RouterSettings {
+    int bus_wait_time;
+    double bus_velocity;
+};
 
-	struct RouteItem
-	{
-		std::string edge_name;
-		int span_count = 0;
-		double time = 0.0;
-		graph::EdgeType type;
-	};
+struct RouteProperties {
+    int stops_number = 0;
+    double waiting_time = 0;
+    double travel_time = 0;
 
-	struct RouteData
-	{
-		double total_time = 0.0;
-		std::vector<RouteItem> items;
-	};
+    RouteProperties() = default;
+    RouteProperties(int stops_number, double waiting_time, double travel_time);
+};
 
+RouteProperties operator+(const RouteProperties& lhs, const RouteProperties& rhs);
 
-	class TransportRouter
-	{
-	public:
-		TransportRouter(transport_catalogue::TransportCatalogue&);
+bool operator<(const RouteProperties& lhs, const RouteProperties& rhs);
 
-		void ApplyRouterSettings(RouterSettings&);
-		const RouterSettings& GetRouterSettings() const;
-		std::optional<const RouteData> CalculateRoute(const std::string_view, const std::string_view);
+bool operator>(const RouteProperties& lhs, const RouteProperties& rhs);
 
-	private:
-	
-		const RouteData BuildOptimalRoute(const graph::Router<double>::RouteInfo&) const;
+class DistanceCalculator {
+public:
+    explicit DistanceCalculator(const transport_catalogue::TransportCatalogue& catalogue,
+                                const domain::Bus* route);
 
-		void BuildGraph();
+    int GetDistanceBetween(int from, int to);
 
-		void FillGraphStops(const std::vector<const transport_catalogue::Stop*>);
+private:
+    std::vector<int> forward_dist_;
+    std::vector<int> reverse_dist_;
+};
 
-		void FillGraphRoutes(const std::deque<const transport_catalogue::Route*>);
+struct RouteConditions {
+    const domain::Stop* from = nullptr;
+    const domain::Stop* to = nullptr;
+    const domain::Bus* route = nullptr;
+    RouteProperties trip = {};
 
-		RouterSettings settings_;
-		transport_catalogue::TransportCatalogue& tc_;
+    RouteConditions() = default;
+    RouteConditions(const domain::Stop* from, const domain::Stop* to,
+                    const domain::Bus* route, const RouteProperties route_prop);
+};
 
-		graph::DirectedWeightedGraph<double> dw_graph_;
-		std::unique_ptr<graph::Router<double>> router_ = nullptr;
-		std::unordered_map<std::string_view, size_t> vertexes_wait_;
-		std::unordered_map<std::string_view, size_t> vertexes_travel_;
+class TransportRouter {
+public:
+    explicit TransportRouter(const transport_catalogue::TransportCatalogue& catalogue);
 
-	};
-}
+    void SetSettings(const RouterSettings& settings);
+    const RouterSettings& GetSettings() const;
+
+    void CalcRoute();
+
+    std::optional<std::vector<const RouteConditions*>> GetRoute(std::string_view from, std::string_view to) const;
+
+private:
+    const transport_catalogue::TransportCatalogue& catalogue_;
+
+    RouterSettings settings_ = {};
+
+    std::unique_ptr<graph::DirectedWeightedGraph<RouteProperties>> graph_ = nullptr;
+    std::unique_ptr<graph::Router<RouteProperties>> router_ = nullptr;
+    std::unordered_map<const domain::Stop*, graph::VertexId> graph_vertexes_ = {};
+    std::vector<RouteConditions> graph_edges_ = {};
+};
+
+} // namespace transport_router

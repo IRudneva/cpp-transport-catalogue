@@ -1,105 +1,189 @@
 #include "transport_router.h"
 
-namespace router
+namespace transport_router {
+
+// ---> RouteProperties
+
+RouteProperties::RouteProperties(int stops_number, double waiting_time, double travel_time) :
+                                 stops_number(stops_number),
+                                 waiting_time(waiting_time),
+                                 travel_time(travel_time) {
+}
+
+RouteProperties operator+(const RouteProperties& lhs, const RouteProperties& rhs)
 {
-	TransportRouter::TransportRouter(transport_catalogue::TransportCatalogue& tc)
-		: tc_(tc), dw_graph_(tc.GetAllStopsCount() * 2) {
-	}
+    return {lhs.stops_number + rhs.stops_number,
+            lhs.waiting_time + rhs.waiting_time,
+            lhs.travel_time + rhs.travel_time};
+}
 
-	void TransportRouter::ApplyRouterSettings(RouterSettings& settings)
-	{
-		settings_ = std::move(settings);
-	}
+bool operator<(const RouteProperties& lhs, const RouteProperties& rhs)
+{
+    return (lhs.waiting_time + lhs.travel_time) < (rhs.waiting_time + rhs.travel_time);
+}
 
-	const RouterSettings& TransportRouter::GetRouterSettings() const
-	{
-		return settings_;
-	}
+bool operator>(const RouteProperties& lhs, const RouteProperties& rhs)
+{
+    return (lhs.waiting_time + lhs.travel_time) > (rhs.waiting_time + rhs.travel_time);
+}
 
-	std::optional<const RouteData> TransportRouter::CalculateRoute(const std::string_view from, const std::string_view to)
-	{
-		if (!router_)
-		{
-			BuildGraph();
-		}
+// <--- RouteProperties
 
-		const auto stop_from = vertexes_wait_.at(from);
-		const auto stop_to = vertexes_wait_.at(to);
-		auto calculated_route = router_->BuildRoute(stop_from, stop_to);
-		if (!calculated_route)
-		{
-			return std::nullopt;
-		}
+// ---> DistanceCalculator
 
-		return RouteData{ BuildOptimalRoute(calculated_route.value()) };
-	}
+DistanceCalculator::DistanceCalculator(const transport_catalogue::TransportCatalogue& catalogue,
+                                       const domain::Bus* route) :
+                                       forward_dist_(route->stops.size(), 0),
+                                       reverse_dist_(route->stops.size(), 0) {
+    int forward = 0;
+    int reverse = 0;
 
-	const RouteData TransportRouter::BuildOptimalRoute(const graph::Router<double>::RouteInfo& router_inf) const {
-		RouteData result;
+    for (int i = 0; i < static_cast<int>(route->stops.size()-1); ++i) {
+        forward += catalogue.GetDistance(route->stops[i], route->stops[i + 1]);
+        forward_dist_[i + 1] = forward;
 
-		for (const auto& element_id : router_inf.edges)
-		{
-			auto edge_details = dw_graph_.GetEdge(element_id);
-			result.total_time += edge_details.weight;
-			result.items.emplace_back(RouteItem{
-				edge_details.edge_name,
-				(edge_details.type == graph::EdgeType::TRAVEL) ? edge_details.span_count : 0,
-				edge_details.weight,
-				edge_details.type });
-		}
-		return result;
-	}
+        if (!route->is_roundtrip) {
+            reverse += catalogue.GetDistance(route->stops[i + 1], route->stops[i]);
+            reverse_dist_[i + 1] = reverse;
+        }
+    }
+}
 
-	void TransportRouter::BuildGraph()
-	{
-		FillGraphStops(tc_.GetAllStopsPtr());
+int DistanceCalculator::GetDistanceBetween(int from, int to) {
+    if (from < to) {
+        return forward_dist_[to] - forward_dist_[from];
+    }
+    else {
+        return reverse_dist_[from] - reverse_dist_[to];
+    }
+}
 
-		FillGraphRoutes(tc_.GetAllRoutesPtr());
+// <--- DistanceCalculator
 
-		router_ = std::make_unique<graph::Router<double>>(dw_graph_);
-	}
+// ---> RouteConditions
 
-	void TransportRouter::FillGraphStops(const std::vector<const transport_catalogue::Stop*> all_stops) {
-		int vertex_id = 0;
-		for (const auto& stop : all_stops)
-		{
-			vertexes_wait_.insert({ stop->name, vertex_id });
-			vertexes_travel_.insert({ stop->name, ++vertex_id });
-			dw_graph_.AddEdge({
-					vertexes_wait_.at(stop->name),
-					vertexes_travel_.at(stop->name),
-					settings_.bus_wait_time * 1.0,
-					stop->name,
-					graph::EdgeType::WAIT,
-					0
-				});
-			++vertex_id;
-		}
-	}
+RouteConditions::RouteConditions(const domain::Stop* from, const domain::Stop* to,
+                                 const domain::Bus* route, RouteProperties route_prop) :
+                                 from(from),
+                                 to(to),
+                                 route(route),
+                                 trip(route_prop) {
+}
+// <--- RouteConditions
 
-	void TransportRouter::FillGraphRoutes(const std::deque<const transport_catalogue::Route*> all_routes) {
-		for (const auto& route : all_routes)
-		{
-			for (size_t it_from = 0; it_from < route->stops.size() - 1; ++it_from)
-			{
-				int span_count = 0;
-				for (size_t it_to = it_from + 1; it_to < route->stops.size(); ++it_to)
-				{
-					double road_distance = 0.0;
-					for (size_t it = it_from + 1; it <= it_to; ++it)
-					{
-						road_distance += static_cast<double>(tc_.GetDistance(route->stops[it - 1], route->stops[it]));
-					}
-					dw_graph_.AddEdge({
-							vertexes_travel_.at(route->stops[it_from]->name),
-							vertexes_wait_.at(route->stops[it_to]->name),
-							road_distance / (settings_.bus_velocity * 1000.0 / 60.0),
-							route->route_name,
-							graph::EdgeType::TRAVEL,
-							++span_count
-						});
-				}
-			}
-		}
-	}
-} //namespace router
+// ---> TransportRouter
+
+TransportRouter::TransportRouter(const transport_catalogue::TransportCatalogue& catalogue) :
+                                 catalogue_(catalogue) {
+}
+
+void TransportRouter::SetSettings(const RouterSettings& settings) {
+    settings_ = settings;
+}
+
+const RouterSettings& TransportRouter::GetSettings() const {
+    return settings_;
+}
+
+void TransportRouter::CalcRoute() {
+    // все остановки
+    const auto& stops = catalogue_.GetStops();
+
+    graph_ = std::make_unique<graph::DirectedWeightedGraph<RouteProperties>>(stops.size());
+
+    graph::VertexId vertex_counter = 0;
+
+    // добавляем все остановки
+    for (const auto& [stop_name, stop_ptr] : stops) {
+        graph_vertexes_.insert({stop_ptr, vertex_counter++});
+    }
+
+    // все маршруты
+    const auto& buses = catalogue_.GetBuses();
+
+    // добавляем все маршруты
+    for (const auto& [bus_name, bus_ptr] : buses) {
+        const auto& stops = bus_ptr->stops;
+
+        DistanceCalculator distance_calc(catalogue_, bus_ptr);
+
+        for (int i = 0; i < static_cast<int>(stops.size()-1); ++i) {
+            for (int j = i + 1; j < static_cast<int>(stops.size()); ++j) {
+                RouteProperties route_prop(j-i,
+                                           settings_.bus_wait_time,
+                                           distance_calc.GetDistanceBetween(i, j)/settings_.bus_velocity);
+
+                RouteConditions route_cond{stops[i], stops[j], bus_ptr, route_prop};
+
+                graph_->AddEdge(graph::Edge<RouteProperties>{graph_vertexes_[route_cond.from],
+                                                             graph_vertexes_[route_cond.to],
+                                                             route_prop});
+                graph_edges_.emplace_back(std::move(route_cond));
+
+                if (!bus_ptr->is_roundtrip) {
+                    RouteProperties route_prop(j-i,
+                                               settings_.bus_wait_time,
+                                               distance_calc.GetDistanceBetween(j, i)/settings_.bus_velocity);
+
+                    RouteConditions route_cond{stops[i], stops[j], bus_ptr, route_prop};
+
+                    graph_->AddEdge(graph::Edge<RouteProperties>{graph_vertexes_[route_cond.to],
+                                                                 graph_vertexes_[route_cond.from],
+                                                                 route_prop});
+                    graph_edges_.emplace_back(std::move(route_cond));
+                }
+            }
+        }
+    }
+
+    router_ = std::make_unique<graph::Router<RouteProperties>>(*graph_);
+}
+
+std::optional<std::vector<const RouteConditions*>>
+TransportRouter::GetRoute(std::string_view from, std::string_view to) const {
+    const domain::Stop* stop_from = catalogue_.FindStop(from);
+    const domain::Stop* stop_to = catalogue_.FindStop(to);
+
+    // не смогли найти одну из остановок
+    if ((nullptr == stop_from) ||
+        (nullptr == stop_to)) {
+        return std::nullopt;
+    }
+
+    std::vector<const RouteConditions*> result;
+
+    // первая и последняя остановки совпадают
+    if (stop_from == stop_to) {
+        return result;
+    }
+
+    if (graph_vertexes_.empty()) {
+        return std::nullopt;
+    }
+
+    // вершины графа
+    graph::VertexId vertex_from = graph_vertexes_.at(stop_from);
+    graph::VertexId vertex_to = graph_vertexes_.at(stop_to);
+
+    // строим граф
+    auto route = router_->BuildRoute(vertex_from, vertex_to);
+
+    // если не смогли построить
+    if (!route.has_value()) {
+        return std::nullopt;
+    }
+
+    // выделяем память
+    result.reserve(route.value().edges.size());
+
+    // если смогли построить
+    for (const auto& edge : route.value().edges) {
+        result.emplace_back(&graph_edges_.at(edge));
+    }
+
+    return result;
+}
+
+// <--- TransportRouter
+
+} // namespace transport_router
